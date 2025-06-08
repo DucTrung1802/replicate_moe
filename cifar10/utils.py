@@ -25,10 +25,11 @@ def entropy(dispatch, base=None):
     
     return ent
 
-try:
-    _, term_width = os.popen('stty size', 'r').read().split()
-except:
-    term_width = 120
+# try:
+#     _, term_width = os.popen('stty size', 'r').read().split()
+# except:
+    
+term_width = 120
 term_width = int(term_width)
 TOTAL_BAR_LENGTH = 65.
 last_time = time.time()
