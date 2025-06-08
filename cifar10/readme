@@ -1,0 +1,7 @@
+For MoE:
+python main.py --model resnet18 --mixture 
+python main.py --model MobileNetV2 --mixture
+
+For Single: 
+python main.py --model resnet18 
+python main.py --model MobileNetV2

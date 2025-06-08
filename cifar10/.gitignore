@@ -1,0 +1,6 @@
+/checkpoint
+/__pycache__
+/checkpoint/*.ckpt
+/data
+**.ckpt
+*.ckpt
