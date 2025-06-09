@@ -24,6 +24,7 @@ from utils import entropy
 import numpy as np
 import random
 import supported
+import pandas as pd
 
 torch.cuda.set_device(0)
 torch.manual_seed(1)
@@ -42,6 +43,8 @@ config = get_config()
 EXPERT_NUM = config["experts"]
 CLUSTER_NUM = config["clusters"]
 strategy = config["strategy"]
+PATIENCE = config["patience"]
+MAX_EPOCHS = 10000
 
 parser = argparse.ArgumentParser(description="PyTorch CIFAR10 Training")
 parser.add_argument("--model", choices=supported.models)
@@ -57,6 +60,8 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 # device = "cpu"
 best_acc = 0  # best test accuracy
 best_acc_list = []
+train_loss_list = []
+test_loss_list = []
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
 # Data
@@ -166,8 +171,6 @@ classes = (
 
 # Training
 def train(epoch):
-
-    print("\nEpoch: %d" % epoch)
     net.train()
     train_loss = 0
     correct = 0
@@ -201,9 +204,11 @@ def train(epoch):
         progress_bar(
             batch_idx,
             len(trainloader),
-            "Loss: %.3f | Acc: %.3f%% (%d/%d)"
+            "Train loss: %.3f | Acc: %.3f%% (%d/%d)"
             % (train_loss / (batch_idx + 1), 100.0 * correct / total, correct, total),
         )
+
+    train_loss_list.append(train_loss / total)
 
 
 def test(epoch):
@@ -235,7 +240,7 @@ def test(epoch):
             progress_bar(
                 batch_idx,
                 len(testloader),
-                "Loss: %.3f | Acc: %.3f%% (%d/%d)"
+                "Test loss: %.3f | Acc: %.3f%% (%d/%d)"
                 % (
                     test_loss / (batch_idx + 1),
                     100.0 * correct / total,
@@ -243,6 +248,8 @@ def test(epoch):
                     total,
                 ),
             )
+
+        test_loss_list.append(test_loss / total)
 
     # Save checkpoint.
     acc = 100.0 * correct / total
@@ -281,7 +288,6 @@ if __name__ == "__main__":
                     net.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-4
                 )
                 optimizers = [optimizer]
-            EPOCHS = 10
 
         elif args.model == "MobileNetV2":
             if args.mixture:
@@ -301,7 +307,6 @@ if __name__ == "__main__":
                     net.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-4
                 )
                 optimizers = [optimizer]
-            EPOCHS = 30
 
         if args.resume:
             # Load checkpoint.
@@ -314,14 +319,41 @@ if __name__ == "__main__":
 
         criterion = nn.CrossEntropyLoss()
         # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=MAX_EPOCHS
+        )
 
         ent_list, acc_list = [], []
 
-        for epoch in range(start_epoch, start_epoch + EPOCHS):
+        patience_count = 0
+        for epoch in range(start_epoch, start_epoch + MAX_EPOCHS):
+            print(f"\nEpoch: {epoch + 1}/{MAX_EPOCHS}")
             train(epoch)
             test(epoch)
             scheduler.step()
+
+            # Save loss values
+            if not os.path.isdir("checkpoint"):
+                os.mkdir("checkpoint")
+
+            pd.DataFrame(
+                {
+                    "epoch": list(range(1, len(train_loss_list) + 1)),
+                    "train_loss": train_loss_list,
+                    "test_loss": test_loss_list,
+                }
+            ).to_csv("./checkpoint/cifar10_results.csv", index=False)
+
+            # Early stopping
+            if epoch > PATIENCE:
+                if patience_count >= PATIENCE:
+                    print(f"Early stopping, stop at epoch <{epoch}>.")
+                    break
+                else:
+                    if test_loss_list[-1] < test_loss_list[-2]:
+                        patience_count = 0
+                    else:
+                        patience_count += 1
 
         best_acc_list.append(best_acc)
         best_acc = 0

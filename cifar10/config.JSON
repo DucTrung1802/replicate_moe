@@ -5,6 +5,7 @@
   "strategy": "top1",
   "degree": 30,
   "crop": 24,
-  "classes": 10, 
-  "clusters": 10
+  "classes": 10,
+  "clusters": 10,
+  "patience": 10
 }
