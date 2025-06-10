@@ -345,6 +345,7 @@ if __name__ == "__main__":
                 "model": args.model,
                 "is_mixture": args.mixture,
                 "dataset": "CIFAR-10",
+                "batch_size": batch_size,
                 "epochs": MAX_EPOCHS,
                 "note": "TEST",
             },
