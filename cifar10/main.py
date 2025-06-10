@@ -275,6 +275,7 @@ def test(epoch):
 if __name__ == "__main__":
     # for i in range(5):
     for i in range(1):
+        print(f"Model: {args.model} | Mixture: {args.mixture}")
         print(f"Batch size: {batch_size}")
         print("==> Building model..")
 
