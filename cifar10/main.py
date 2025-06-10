@@ -54,6 +54,9 @@ parser.add_argument(
 parser.add_argument(
     "--resume", "-r", action="store_true", help="resume from checkpoint"
 )
+parser.add_argument(
+    "--batch_size", type=int, default=128, help="input batch size for training"
+)
 args = parser.parse_args()
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -62,7 +65,7 @@ best_test_loss = -np.inf
 best_acc = 0  # best test accuracy
 best_acc_list = []
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
-
+batch_size = args.batch_size
 
 # Data
 print("==> Preparing data..")
@@ -123,7 +126,7 @@ trainset = torchvision.datasets.CIFAR10(
 # trainset = torch.utils.data.ConcatDataset([trainset,trainset_flip])
 trainloader = torch.utils.data.DataLoader(
     trainset,
-    batch_size=128,
+    batch_size=batch_size,
     shuffle=True,
     num_workers=2,
     worker_init_fn=seed_worker,
@@ -148,7 +151,7 @@ testset = torchvision.datasets.CIFAR10(
 # testset = torch.utils.data.ConcatDataset([testset,testset_flip])
 testloader = torch.utils.data.DataLoader(
     testset,
-    batch_size=100,
+    batch_size=batch_size,
     shuffle=True,
     num_workers=2,
     worker_init_fn=seed_worker,
@@ -272,6 +275,7 @@ def test(epoch):
 if __name__ == "__main__":
     # for i in range(5):
     for i in range(1):
+        print(f"Batch size: {batch_size}")
         print("==> Building model..")
 
         if args.model == "resnet18":
