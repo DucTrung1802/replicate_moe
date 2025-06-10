@@ -71,14 +71,15 @@ transform_test = transforms.Compose([
     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
 ])
 
-# transform_rotate_train = transforms.Compose([
-#     torchvision.transforms.RandomRotation((30,30)),
-#     transforms.CenterCrop(24),
-#     transforms.Resize(size=32),
-#     transforms.ToTensor(),
-#     transforms.GaussianBlur(kernel_size=(3,7), sigma=(1.1,2.2)),
-#     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-# ])
+transform_rotate_train = transforms.Compose([
+    torchvision.transforms.RandomRotation((-30,30)),
+    torchvision.transforms.RandomHorizontalFlip(p=0.5),
+    transforms.CenterCrop(24),
+    transforms.Resize(size=32),
+    transforms.ToTensor(),
+    # transforms.GaussianBlur(kernel_size=(3,7), sigma=(1.1,2.2)),
+    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+])
 
 # transform_rotate_test = transforms.Compose([
 #     torchvision.transforms.RandomRotation((30,30)),
@@ -98,14 +99,14 @@ trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
 # trainset.targets = torch.zeros_like(trainset.targets)
 
 # # trainset negative examples
-# trainset_flip = torchvision.datasets.CIFAR10(root='./data', train=True,
-#                                         download=True, transform=transform_rotate_train)
+trainset_flip = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                        download=True, transform=transform_rotate_train)
 # # Cluster and targets
 # trainset_flip.targets = torch.tensor(trainset_flip.targets)
 # trainset_flip.cluster = trainset_flip.targets
 # trainset_flip.targets = torch.ones_like(trainset_flip.targets)
 
-# trainset = torch.utils.data.ConcatDataset([trainset,trainset_flip])
+trainset = torch.utils.data.ConcatDataset([trainset,trainset_flip])
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=128,
                                          shuffle=True, num_workers=2,
                                          worker_init_fn=seed_worker,generator=g,)
@@ -156,7 +157,6 @@ def train(epoch):
         if args.mixture:
             outputs,_,load_balance_loss,_ = net(inputs)
             clf_loss = criterion(outputs, targets)
-            # loss = clf_loss + 0.01*loss
             loss = clf_loss + 0.001*load_balance_loss
         
         else:
@@ -177,8 +177,9 @@ def train(epoch):
 
         progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                      % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
-
-
+    train_acc = 100.*correct/total
+    train_loss = train_loss/batch_idx+1
+    return train_acc, train_loss
 def test(epoch):
     global best_acc
     net.eval()
@@ -210,6 +211,7 @@ def test(epoch):
 
     # Save checkpoint.
     acc = 100.*correct/total
+    test_loss = test_loss/batch_idx+1
     if acc > best_acc:
         print('Saving..')
         state = {
@@ -221,9 +223,10 @@ def test(epoch):
             os.mkdir('checkpoint')
         torch.save(state, './checkpoint/ckpt.pth')
         best_acc = acc
-
+    return acc, test_loss
 if __name__ == "__main__":
     # for i in range(5):
+    import wandb
     for i in range(1):
         print('==> Building model..')
         if args.model=='resnet18':
@@ -238,7 +241,7 @@ if __name__ == "__main__":
                 net = resnet.ResNet18().to(device)
                 optimizer = optim.SGD(net.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-4)
                 optimizers = [optimizer]
-            EPOCHS=10
+            EPOCHS=50
 
         elif args.model=='MobileNetV2':
             if args.mixture:
@@ -260,10 +263,36 @@ if __name__ == "__main__":
 
         ent_list, acc_list = [], []
 
+
+        
+
+# Start a new wandb run to track this script.
+        run = wandb.init(
+            # Set the wandb entity where your project will be logged (generally your team name).
+            entity="retsam-deep-learning",
+            # Set the wandb project where this run will be logged.
+            project="machine-learning-data-mining",
+            # Track hyperparameters and run metadata.
+            config={
+                "model": args.model,
+                "is_mixture": args.mixture,
+                "dataset": "CIFAR-10",
+                "epochs": EPOCHS,
+                "note": "rotation -30, 30"
+            },
+        )
+
+
+    # Log metrics to wandb.
         for epoch in range(start_epoch, start_epoch+EPOCHS):
-            train(epoch)
-            test(epoch)
+            train_acc, train_loss = train(epoch)
+            test_acc, test_loss = test(epoch)
             scheduler.step()
+            run.log({"best_acc": best_acc, "train_acc": train_acc,
+                        "train_loss": train_loss, 
+                        "test_acc": test_acc, "test_loss": test_loss,
+                })
+        run.finish()
 
         best_acc_list.append(best_acc)
         best_acc = 0
