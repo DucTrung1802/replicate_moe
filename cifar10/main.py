@@ -24,7 +24,7 @@ from utils import entropy
 import numpy as np
 import random
 import supported
-import pandas as pd
+import wandb
 
 torch.cuda.set_device(0)
 torch.manual_seed(1)
@@ -182,7 +182,6 @@ def train(epoch):
         if args.mixture:
             outputs, _, load_balance_loss, _ = net(inputs)
             clf_loss = criterion(outputs, targets)
-            # loss = clf_loss + 0.01*loss
             loss = clf_loss + 0.001 * load_balance_loss
 
         else:
@@ -208,7 +207,9 @@ def train(epoch):
             % (train_loss / (batch_idx + 1), 100.0 * correct / total, correct, total),
         )
 
-    train_loss_list.append(train_loss / total)
+    train_acc = 100.0 * correct / total
+    train_loss = train_loss / (batch_idx + 1)
+    return train_acc, train_loss
 
 
 def test(epoch):
@@ -249,21 +250,23 @@ def test(epoch):
                 ),
             )
 
-        test_loss_list.append(test_loss / total)
-
     # Save checkpoint.
-    acc = 100.0 * correct / total
-    if acc > best_acc:
+    test_acc = 100.0 * correct / total
+    test_loss = test_loss / (batch_idx + 1)
+
+    if test_acc > best_acc:
         print("Saving..")
         state = {
             "net": net.state_dict(),
-            "acc": acc,
+            "acc": test_acc,
             "epoch": epoch,
         }
         if not os.path.isdir("checkpoint"):
             os.mkdir("checkpoint")
         torch.save(state, "./checkpoint/ckpt.pth")
-        best_acc = acc
+        best_acc = test_acc
+
+    return test_acc, test_loss
 
 
 if __name__ == "__main__":
@@ -325,24 +328,43 @@ if __name__ == "__main__":
 
         ent_list, acc_list = [], []
 
+        # Start a new wandb run to track this script.
+        wandb.login()
+        run = wandb.init(
+            # Set the wandb entity where your project will be logged (generally your team name).
+            entity="retsam-deep-learning",
+            # Set the wandb project where this run will be logged.
+            project="machine-learning-data-mining",
+            # Track hyperparameters and run metadata.
+            config={
+                "model": args.model,
+                "is_mixture": args.mixture,
+                "dataset": "CIFAR-10",
+                "epochs": MAX_EPOCHS,
+                "note": "TEST",
+            },
+        )
+
         patience_count = 0
         for epoch in range(start_epoch, start_epoch + MAX_EPOCHS):
             print(f"\nEpoch: {epoch + 1}/{MAX_EPOCHS}")
-            train(epoch)
-            test(epoch)
+            train_acc, train_loss = train(epoch)
+            test_acc, test_loss = test(epoch)
             scheduler.step()
+
+            run.log(
+                {
+                    "best_acc": best_acc,
+                    "train_acc": train_acc,
+                    "train_loss": train_loss,
+                    "test_acc": test_acc,
+                    "test_loss": test_loss,
+                }
+            )
 
             # Save loss values
             if not os.path.isdir("checkpoint"):
                 os.mkdir("checkpoint")
-
-            pd.DataFrame(
-                {
-                    "epoch": list(range(1, len(train_loss_list) + 1)),
-                    "train_loss": train_loss_list,
-                    "test_loss": test_loss_list,
-                }
-            ).to_csv("./checkpoint/cifar10_results.csv", index=False)
 
             # Early stopping
             if epoch > PATIENCE:
@@ -354,6 +376,8 @@ if __name__ == "__main__":
                         patience_count = 0
                     else:
                         patience_count += 1
+
+        run.finish()
 
         best_acc_list.append(best_acc)
         best_acc = 0

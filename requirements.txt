@@ -9,3 +9,4 @@ torchinfo
 --extra-index-url https://download.pytorch.org/whl/cu118
 numpy
 pandas
+wandb
