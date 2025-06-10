@@ -7,5 +7,6 @@
   "crop": 24,
   "classes": 10,
   "clusters": 10,
-  "patience": 10
+  "patience": 5,
+  "max_epoch": 200
 }

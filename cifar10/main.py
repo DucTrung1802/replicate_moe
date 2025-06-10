@@ -44,7 +44,7 @@ EXPERT_NUM = config["experts"]
 CLUSTER_NUM = config["clusters"]
 strategy = config["strategy"]
 PATIENCE = config["patience"]
-MAX_EPOCHS = 10000
+MAX_EPOCHS = config["max_epoch"]
 
 parser = argparse.ArgumentParser(description="PyTorch CIFAR10 Training")
 parser.add_argument("--model", choices=supported.models)
@@ -58,11 +58,11 @@ args = parser.parse_args()
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 # device = "cpu"
+best_test_loss = -np.inf
 best_acc = 0  # best test accuracy
 best_acc_list = []
-train_loss_list = []
-test_loss_list = []
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
+
 
 # Data
 print("==> Preparing data..")
@@ -372,8 +372,9 @@ if __name__ == "__main__":
                     print(f"Early stopping, stop at epoch <{epoch}>.")
                     break
                 else:
-                    if test_loss_list[-1] < test_loss_list[-2]:
+                    if test_loss < best_test_loss:
                         patience_count = 0
+                        best_test_loss = test_loss
                     else:
                         patience_count += 1
 
