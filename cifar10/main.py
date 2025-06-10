@@ -87,6 +87,25 @@ transform_train = transforms.Compose(
     ]
 )
 
+transform_train_aug = transforms.Compose(
+    [
+        transforms.RandomResizedCrop(
+            32, scale=(0.8, 1.2), ratio=(0.75, 1.33)
+        ),  # Random zoom & aspect ratio
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(p=0.1),  # Slight chance of vertical flip
+        transforms.RandomRotation(15),  # Small rotations
+        transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
+        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),  # Random shift
+        transforms.RandomPerspective(
+            distortion_scale=0.2, p=0.3
+        ),  # Simulate 3D distortion
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    ]
+)
+
+
 transform_test = transforms.Compose(
     [
         transforms.CenterCrop(24),
@@ -118,6 +137,10 @@ trainset = torchvision.datasets.CIFAR10(
     root="./data", train=True, download=True, transform=transform_train
 )
 
+trainset_aug = torchvision.datasets.CIFAR10(
+    root="./data", train=True, download=True, transform=transform_train_aug
+)
+
 # Create cluster and targets
 # trainset.targets = torch.tensor(trainset.targets)
 # trainset.cluster = trainset.targets
@@ -131,7 +154,7 @@ trainset = torchvision.datasets.CIFAR10(
 # trainset_flip.cluster = trainset_flip.targets
 # trainset_flip.targets = torch.ones_like(trainset_flip.targets)
 
-# trainset = torch.utils.data.ConcatDataset([trainset,trainset_flip])
+trainset = torch.utils.data.ConcatDataset([trainset, trainset_aug])
 trainloader = torch.utils.data.DataLoader(
     trainset,
     batch_size=batch_size,
