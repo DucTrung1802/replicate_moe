@@ -384,9 +384,9 @@ if __name__ == "__main__":
                     print(f"Early stopping, stop at epoch <{epoch}>.")
                     break
                 else:
-                    if test_loss < best_test_loss:
+                    if test_acc > best_acc:
                         patience_count = 0
-                        best_test_loss = test_loss
+                        best_acc = test_acc
                     else:
                         patience_count += 1
 
