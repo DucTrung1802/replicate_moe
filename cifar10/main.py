@@ -52,15 +52,15 @@ parser.add_argument("--model", choices=supported.models)
 parser.add_argument(
     "--mixture", action="store_true", help="use MoE model instead of single model"
 )
-parser.add_argument(
-    "--resume", "-r", action="store_true", help="resume from checkpoint"
-)
+parser.add_argument("--resume", "-r", help="resume from checkpoint")
 parser.add_argument(
     "--batch_size", type=int, default=128, help="input batch size for training"
 )
-parser.add_argument("--note", default="", help="note for the model")
+parser.add_argument("--note", default=None, help="note for the model")
+parser.add_argument("--wandb_id", default=None, help="id for the wandb run")
 
 args = parser.parse_args()
+
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 # device = "cpu"
@@ -69,9 +69,11 @@ best_acc = 0  # best test accuracy
 best_acc_list = []
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 batch_size = args.batch_size
+wandb_id = args.wandb_id
 
+checkpoint_name = f"ckpt_{"moe" if args.mixture else "norm"}_{args.model}_batch_size_{batch_size}_{args.note}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+resume_checkpoint = args.resume
 
-checkpoint_name = f"ckpt_{"moe" if args.mixture else "norm"}_{args.model}_batch_size_{batch_size}_{args.note}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pth"
 
 # Data
 print("==> Preparing data..")
@@ -326,7 +328,7 @@ if __name__ == "__main__":
             # Load checkpoint.
             print("==> Resuming from checkpoint..")
             assert os.path.isdir("checkpoint"), "Error: no checkpoint directory found!"
-            checkpoint = torch.load(f"./checkpoint/{checkpoint_name}.pth")
+            checkpoint = torch.load(f"./checkpoint/{resume_checkpoint}.pth")
             net.load_state_dict(checkpoint["net"])
             best_acc = checkpoint["acc"]
             start_epoch = checkpoint["epoch"]
@@ -346,6 +348,10 @@ if __name__ == "__main__":
             entity="retsam-deep-learning",
             # Set the wandb project where this run will be logged.
             project="machine-learning-data-mining",
+            # id for the run
+            id=wandb_id,
+            # Resume a run that must use the same run ID.
+            resume="allow",
             # Track hyperparameters and run metadata.
             config={
                 "model": args.model,
