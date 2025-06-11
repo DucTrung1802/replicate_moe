@@ -71,7 +71,7 @@ start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 batch_size = args.batch_size
 wandb_id = args.wandb_id
 
-checkpoint_name = f"ckpt_{"moe" if args.mixture else "norm"}_{args.model}_batch_size_{batch_size}_{args.note}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+checkpoint_name = f"ckpt_{'moe' if args.mixture else 'norm'}_{args.model}_batch_size_{batch_size}_{args.note}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 resume_checkpoint = args.resume
 
 
