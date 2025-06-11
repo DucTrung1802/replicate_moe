@@ -40,6 +40,7 @@ config = get_config()
 EXPERT_NUM = config['experts']
 CLUSTER_NUM = config['clusters']
 strategy = config['strategy']
+PATIENCE = config["patience"]
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--model', choices=supported.models)
@@ -71,15 +72,29 @@ transform_test = transforms.Compose([
     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
 ])
 
+# transform_rotate_train = transforms.Compose([
+#     torchvision.transforms.RandomRotation((-30,30)),
+#     torchvision.transforms.RandomHorizontalFlip(p=0.5),
+#     transforms.CenterCrop(24),
+#     transforms.Resize(size=32),
+#     transforms.ToTensor(),
+#     # transforms.GaussianBlur(kernel_size=(3,7), sigma=(1.1,2.2)),
+#     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+# ])
+
+
 transform_rotate_train = transforms.Compose([
-    torchvision.transforms.RandomRotation((-30,30)),
-    torchvision.transforms.RandomHorizontalFlip(p=0.5),
-    transforms.CenterCrop(24),
-    transforms.Resize(size=32),
+    transforms.RandomResizedCrop(32, scale=(0.8, 1.2), ratio=(0.75, 1.33)),  # Random zoom & aspect ratio
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomVerticalFlip(p=0.1),  # Slight chance of vertical flip
+    transforms.RandomRotation(15),  # Small rotations
+    transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
+    transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),  # Random shift
+    transforms.RandomPerspective(distortion_scale=0.2, p=0.3),  # Simulate 3D distortion
     transforms.ToTensor(),
-    # transforms.GaussianBlur(kernel_size=(3,7), sigma=(1.1,2.2)),
     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
 ])
+
 
 # transform_rotate_test = transforms.Compose([
 #     torchvision.transforms.RandomRotation((30,30)),
@@ -178,7 +193,7 @@ def train(epoch):
         progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                      % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
     train_acc = 100.*correct/total
-    train_loss = train_loss/batch_idx+1
+    train_loss = train_loss/(batch_idx+1)
     return train_acc, train_loss
 def test(epoch):
     global best_acc
@@ -211,7 +226,7 @@ def test(epoch):
 
     # Save checkpoint.
     acc = 100.*correct/total
-    test_loss = test_loss/batch_idx+1
+    test_loss = test_loss/(batch_idx+1)
     if acc > best_acc:
         print('Saving..')
         state = {
@@ -224,6 +239,7 @@ def test(epoch):
         torch.save(state, './checkpoint/ckpt.pth')
         best_acc = acc
     return acc, test_loss
+
 if __name__ == "__main__":
     # for i in range(5):
     import wandb
@@ -278,7 +294,7 @@ if __name__ == "__main__":
                 "is_mixture": args.mixture,
                 "dataset": "CIFAR-10",
                 "epochs": EPOCHS,
-                "note": "rotation -30, 30"
+                "note": "use auto augment"
             },
         )
 
