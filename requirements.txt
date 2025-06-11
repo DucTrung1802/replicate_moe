@@ -1,2 +1,12 @@
 torchvision
 matplotlib
+Pillow
+matplotlib
+torch==2.7.0+cu118
+torchvision==0.22.0+cu118
+torchaudio==2.7.0
+torchinfo
+--extra-index-url https://download.pytorch.org/whl/cu118
+numpy
+pandas
+wandb
