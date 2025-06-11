@@ -2,6 +2,7 @@
 implementation of resnet18 and mobilenet follows https://github.com/kuangliu/pytorch-cifar
 """
 
+from datetime import datetime
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -57,6 +58,8 @@ parser.add_argument(
 parser.add_argument(
     "--batch_size", type=int, default=128, help="input batch size for training"
 )
+parser.add_argument("--note", default="", help="note for the model")
+
 args = parser.parse_args()
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -66,6 +69,9 @@ best_acc = 0  # best test accuracy
 best_acc_list = []
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 batch_size = args.batch_size
+
+
+checkpoint_name = f"ckpt_{"moe" if args.mixture else "norm"}_{args.model}_batch_size_{batch_size}_{args.note}_{datetime.now().strftime('%Y%m%d%H%M%S')}.pth"
 
 # Data
 print("==> Preparing data..")
@@ -266,7 +272,7 @@ def test(epoch):
         }
         if not os.path.isdir("checkpoint"):
             os.mkdir("checkpoint")
-        torch.save(state, "./checkpoint/ckpt.pth")
+        torch.save(state, f"./checkpoint/{checkpoint_name}.pth")
         best_acc = test_acc
 
     return test_acc, test_loss
@@ -320,7 +326,7 @@ if __name__ == "__main__":
             # Load checkpoint.
             print("==> Resuming from checkpoint..")
             assert os.path.isdir("checkpoint"), "Error: no checkpoint directory found!"
-            checkpoint = torch.load("./checkpoint/ckpt.pth")
+            checkpoint = torch.load(f"./checkpoint/{checkpoint_name}.pth")
             net.load_state_dict(checkpoint["net"])
             best_acc = checkpoint["acc"]
             start_epoch = checkpoint["epoch"]
@@ -347,7 +353,7 @@ if __name__ == "__main__":
                 "dataset": "CIFAR-10",
                 "batch_size": batch_size,
                 "epochs": MAX_EPOCHS,
-                "note": "TEST",
+                "note": args.note,
             },
         )
 
