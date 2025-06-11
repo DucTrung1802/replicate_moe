@@ -94,16 +94,6 @@ transform_test = transforms.Compose(
     ]
 )
 
-# transform_rotate_train = transforms.Compose([
-#     torchvision.transforms.RandomRotation((-30,30)),
-#     torchvision.transforms.RandomHorizontalFlip(p=0.5),
-#     transforms.CenterCrop(24),
-#     transforms.Resize(size=32),
-#     transforms.ToTensor(),
-#     # transforms.GaussianBlur(kernel_size=(3,7), sigma=(1.1,2.2)),
-#     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-# ])
-
 
 transform_rotate_train = transforms.Compose([
     transforms.RandomResizedCrop(32, scale=(0.8, 1.2), ratio=(0.75, 1.33)),  # Random zoom & aspect ratio
@@ -118,31 +108,15 @@ transform_rotate_train = transforms.Compose([
 ])
 
 
-# transform_rotate_test = transforms.Compose([
-#     torchvision.transforms.RandomRotation((30,30)),
-#     transforms.CenterCrop(24),
-#     transforms.Resize(size=32),
-#     transforms.ToTensor(),
-#     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-# ])
-
 # Create trainset
 trainset = torchvision.datasets.CIFAR10(
     root="./data", train=True, download=True, transform=transform_train
 )
 
-# Create cluster and targets
-# trainset.targets = torch.tensor(trainset.targets)
-# trainset.cluster = trainset.targets
-# trainset.targets = torch.zeros_like(trainset.targets)
 
 # # trainset negative examples
 trainset_flip = torchvision.datasets.CIFAR10(root='./data', train=True,
                                         download=True, transform=transform_rotate_train)
-# # Cluster and targets
-# trainset_flip.targets = torch.tensor(trainset_flip.targets)
-# trainset_flip.cluster = trainset_flip.targets
-# trainset_flip.targets = torch.ones_like(trainset_flip.targets)
 
 trainset = torch.utils.data.ConcatDataset([trainset,trainset_flip])
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=128,
@@ -263,7 +237,7 @@ def test(epoch):
             )
 
     # Save checkpoint.
-    acc = 100.*correct/total
+    test_acc = 100.*correct/total
     test_loss = test_loss/(batch_idx+1)
     if acc > best_acc:
         print('Saving..')
@@ -276,7 +250,7 @@ def test(epoch):
             os.mkdir('checkpoint')
         torch.save(state, './checkpoint/ckpt.pth')
         best_acc = acc
-    return acc, test_loss
+    return test_acc, test_loss
 
 if __name__ == "__main__":
     # for i in range(5):
@@ -364,11 +338,6 @@ if __name__ == "__main__":
             train_acc, train_loss = train(epoch)
             test_acc, test_loss = test(epoch)
             scheduler.step()
-            run.log({"best_acc": best_acc, "train_acc": train_acc,
-                        "train_loss": train_loss, 
-                        "test_acc": test_acc, "test_loss": test_loss,
-                })
-        run.finish()
 
             run.log(
                 {
@@ -379,10 +348,6 @@ if __name__ == "__main__":
                     "test_loss": test_loss,
                 }
             )
-
-            # Save loss values
-            if not os.path.isdir("checkpoint"):
-                os.mkdir("checkpoint")
 
             # Early stopping
             if epoch > PATIENCE:
