@@ -265,18 +265,6 @@ def test(epoch):
     test_acc = 100.0 * correct / total
     test_loss = test_loss / (batch_idx + 1)
 
-    if test_acc > best_acc:
-        print("Saving..")
-        state = {
-            "net": net.state_dict(),
-            "acc": test_acc,
-            "epoch": epoch,
-        }
-        if not os.path.isdir("checkpoint"):
-            os.mkdir("checkpoint")
-        torch.save(state, f"./checkpoint/{checkpoint_name}.pth")
-        best_acc = test_acc
-
     return test_acc, test_loss
 
 
@@ -385,16 +373,27 @@ if __name__ == "__main__":
                 os.mkdir("checkpoint")
 
             # Early stopping
-            if epoch > PATIENCE:
-                if patience_count >= PATIENCE:
-                    print(f"Early stopping, stop at epoch <{epoch}>.")
+            if test_acc > best_acc:
+                print("Saving..")
+                state = {
+                    "net": net.state_dict(),
+                    "acc": test_acc,
+                    "epoch": epoch,
+                }
+                if not os.path.isdir("checkpoint"):
+                    os.mkdir("checkpoint")
+                torch.save(state, f"./checkpoint/{checkpoint_name}.pth")
+                best_acc = test_acc
+
+                patience_count = 0
+
+            else:
+                patience_count += 1
+                if patience_count > PATIENCE:
+                    print(
+                        f"Early stopping at epoch {epoch} with best_acc {best_acc:.4f}"
+                    )
                     break
-                else:
-                    if test_acc > best_acc:
-                        patience_count = 0
-                        best_acc = test_acc
-                    else:
-                        patience_count += 1
 
         run.finish()
 
