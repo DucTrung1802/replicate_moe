@@ -1,6 +1,5 @@
 {
   "model": "resnet",
-  "epochs": 200,
   "experts": 4,
   "strategy": "top1",
   "degree": 30,
@@ -8,5 +7,5 @@
   "classes": 10,
   "clusters": 10,
   "patience": 5,
-  "max_epoch": 200
+  "max_epoch": 50
 }

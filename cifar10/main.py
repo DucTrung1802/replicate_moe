@@ -11,6 +11,7 @@ import torch.backends.cudnn as cudnn
 
 import torchvision
 import torchvision.transforms as transforms
+from torchvision.transforms.autoaugment import AutoAugment, AutoAugmentPolicy
 import torchvision.models as torchmodels
 
 import os
@@ -45,7 +46,7 @@ EXPERT_NUM = config["experts"]
 CLUSTER_NUM = config["clusters"]
 strategy = config["strategy"]
 PATIENCE = config["patience"]
-MAX_EPOCHS = config["max_epoch"]
+MAX_EPOCH = config["max_epoch"]
 
 parser = argparse.ArgumentParser(description="PyTorch CIFAR10 Training")
 parser.add_argument("--model", choices=supported.models)
@@ -55,6 +56,9 @@ parser.add_argument(
 parser.add_argument("--resume", "-r", help="resume from checkpoint")
 parser.add_argument(
     "--batch_size", type=int, default=128, help="input batch size for training"
+)
+parser.add_argument(
+    "--do_early_stop", action = "store_true", help="input batch size for training"
 )
 parser.add_argument("--note", default=None, help="note for the model")
 parser.add_argument("--wandb_id", default=None, help="id for the wandb run")
@@ -70,7 +74,7 @@ best_acc_list = []
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 batch_size = args.batch_size
 wandb_id = args.wandb_id
-
+DO_EARLY_STOP = args.do_early_stop
 checkpoint_name = f"ckpt_{"moe" if args.mixture else "norm"}_{args.model}_batch_size_{batch_size}_{args.note}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 resume_checkpoint = args.resume
 
@@ -87,6 +91,39 @@ transform_train = transforms.Compose(
     ]
 )
 
+transform_train_aug_1 = transforms.Compose(
+    [
+        transforms.RandomResizedCrop(
+            32, scale=(0.8, 1.2), ratio=(0.75, 1.33)
+        ),  # Random zoom & aspect ratio
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(p=0.1),  # Slight chance of vertical flip
+        transforms.RandomRotation(15),  # Small rotations
+        transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
+        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),  # Random shift
+        transforms.RandomPerspective(
+            distortion_scale=0.2, p=0.3
+        ),  # Simulate 3D distortion
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    ]
+)
+
+transform_train_aug_2 = transforms.Compose(
+    [
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10),
+        transforms.ColorJitter(0.2, 0.2, 0.2, 0.05),
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+        transforms.RandomErasing(
+            p=0.5, scale=(0.02, 0.1), ratio=(0.3, 3.3), value="random"
+        ),
+    ]
+)
+
+
 transform_test = transforms.Compose(
     [
         transforms.CenterCrop(24),
@@ -96,27 +133,19 @@ transform_test = transforms.Compose(
     ]
 )
 
-# transform_rotate_train = transforms.Compose([
-#     torchvision.transforms.RandomRotation((30,30)),
-#     transforms.CenterCrop(24),
-#     transforms.Resize(size=32),
-#     transforms.ToTensor(),
-#     transforms.GaussianBlur(kernel_size=(3,7), sigma=(1.1,2.2)),
-#     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-# ])
-
-# transform_rotate_test = transforms.Compose([
-#     torchvision.transforms.RandomRotation((30,30)),
-#     transforms.CenterCrop(24),
-#     transforms.Resize(size=32),
-#     transforms.ToTensor(),
-#     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-# ])
-
 # Create trainset
 trainset = torchvision.datasets.CIFAR10(
     root="./data", train=True, download=True, transform=transform_train
 )
+
+trainset_aug_1 = torchvision.datasets.CIFAR10(
+    root="./data", train=True, download=True, transform=transform_train_aug_1
+)
+
+trainset_aug_2 = torchvision.datasets.CIFAR10(
+    root="./data", train=True, download=True, transform=transform_train_aug_2
+)
+
 
 # Create cluster and targets
 # trainset.targets = torch.tensor(trainset.targets)
@@ -131,7 +160,7 @@ trainset = torchvision.datasets.CIFAR10(
 # trainset_flip.cluster = trainset_flip.targets
 # trainset_flip.targets = torch.ones_like(trainset_flip.targets)
 
-# trainset = torch.utils.data.ConcatDataset([trainset,trainset_flip])
+trainset = torch.utils.data.ConcatDataset([trainset, trainset_aug_1, trainset_aug_2])
 trainloader = torch.utils.data.DataLoader(
     trainset,
     batch_size=batch_size,
@@ -140,6 +169,7 @@ trainloader = torch.utils.data.DataLoader(
     worker_init_fn=seed_worker,
     generator=g,
 )
+
 
 # Testset cluster and targets
 testset = torchvision.datasets.CIFAR10(
@@ -336,8 +366,7 @@ if __name__ == "__main__":
         criterion = nn.CrossEntropyLoss()
         # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=MAX_EPOCHS
-        )
+            optimizer, T_max=MAX_EPOCH)
 
         ent_list, acc_list = [], []
 
@@ -358,14 +387,14 @@ if __name__ == "__main__":
                 "is_mixture": args.mixture,
                 "dataset": "CIFAR-10",
                 "batch_size": batch_size,
-                "epochs": MAX_EPOCHS,
+                "epochs": MAX_EPOCH,
                 "note": args.note,
             },
         )
 
         patience_count = 0
-        for epoch in range(start_epoch, start_epoch + MAX_EPOCHS):
-            print(f"\nEpoch: {epoch + 1}/{MAX_EPOCHS}")
+        for epoch in range(start_epoch, start_epoch + MAX_EPOCH):
+            print(f"\nEpoch: {epoch + 1}/{MAX_EPOCH}")
             train_acc, train_loss = train(epoch)
             test_acc, test_loss = test(epoch)
             scheduler.step()
@@ -385,7 +414,8 @@ if __name__ == "__main__":
                 os.mkdir("checkpoint")
 
             # Early stopping
-            if epoch > PATIENCE:
+            if DO_EARLY_STOP:
+            # if epoch > PATIENCE:
                 if patience_count >= PATIENCE:
                     print(f"Early stopping, stop at epoch <{epoch}>.")
                     break
