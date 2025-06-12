@@ -1,6 +1,5 @@
 {
   "model": "resnet",
-  "epochs": 200,
   "experts": 4,
   "strategy": "top1",
   "degree": 30,
