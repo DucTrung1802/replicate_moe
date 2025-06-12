@@ -152,10 +152,6 @@ trainset_aug_2 = torchvision.datasets.CIFAR10(
 # trainset.cluster = trainset.targets
 # trainset.targets = torch.zeros_like(trainset.targets)
 
-# # trainset negative examples
-trainset_flip = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                        download=True, transform=transform_rotate_train)
-
 trainset = torch.utils.data.ConcatDataset([trainset, trainset_aug_1, trainset_aug_2])
 trainloader = torch.utils.data.DataLoader(
     trainset,
