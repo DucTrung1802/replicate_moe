@@ -59,8 +59,12 @@ parser.add_argument(
 parser.add_argument("--note", default=None, help="note for the model")
 parser.add_argument("--wandb_id", default=None, help="id for the wandb run")
 parser.add_argument("--early_stop", action="store_true", help="use early stop")
+parser.add_argument("--max_epoch", type=int, help="max epoch")
 
 args = parser.parse_args()
+
+if args.max_epoch:
+    MAX_EPOCHS = args.max_epoch
 
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -72,7 +76,7 @@ start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 batch_size = args.batch_size
 wandb_id = args.wandb_id
 
-checkpoint_name = f"ckpt_{'moe' if args.mixture else 'norm'}_{args.model}_batch_size_{batch_size}_{args.note}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+checkpoint_name = f"ckpt_{'moe' if args.mixture else 'norm'}_{args.model}_batch_size_{batch_size}_{args.note}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 resume_checkpoint = args.resume
 
 
