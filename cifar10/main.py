@@ -289,7 +289,7 @@ def test(epoch):
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
         torch.save(state, './checkpoint/ckpt.pth')
-        best_acc = acc
+        best_acc = test_acc
     return test_acc, test_loss
 
 if __name__ == "__main__":
