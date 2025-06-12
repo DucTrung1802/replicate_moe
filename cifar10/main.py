@@ -58,6 +58,7 @@ parser.add_argument(
 )
 parser.add_argument("--note", default=None, help="note for the model")
 parser.add_argument("--wandb_id", default=None, help="id for the wandb run")
+parser.add_argument("--early_stop", action="store_true", help="use early stop")
 
 args = parser.parse_args()
 
@@ -273,6 +274,7 @@ if __name__ == "__main__":
     for i in range(1):
         print(f"Model: {args.model} | Mixture: {args.mixture}")
         print(f"Batch size: {batch_size}")
+        print(f"Early stop: {args.early_stop}")
         print("==> Building model..")
 
         if args.model == "resnet18":
@@ -372,7 +374,7 @@ if __name__ == "__main__":
             if not os.path.isdir("checkpoint"):
                 os.mkdir("checkpoint")
 
-            # Early stopping
+            # Early stopping and model checkpointing
             if test_acc > best_acc:
                 print("Saving..")
                 state = {
@@ -380,20 +382,18 @@ if __name__ == "__main__":
                     "acc": test_acc,
                     "epoch": epoch,
                 }
-                if not os.path.isdir("checkpoint"):
-                    os.mkdir("checkpoint")
+                os.makedirs("checkpoint", exist_ok=True)
                 torch.save(state, f"./checkpoint/{checkpoint_name}.pth")
                 best_acc = test_acc
-
-                patience_count = 0
-
+                patience_count = 0  # reset on improvement
             else:
-                patience_count += 1
-                if patience_count > PATIENCE:
-                    print(
-                        f"Early stopping at epoch {epoch} with best_acc {best_acc:.4f}"
-                    )
-                    break
+                if args.early_stop:
+                    patience_count += 1
+                    if patience_count > PATIENCE:
+                        print(
+                            f"Early stopping at epoch {epoch} with best_acc {best_acc:.4f}"
+                        )
+                        break
 
         run.finish()
 
