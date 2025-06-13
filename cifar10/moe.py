@@ -166,12 +166,12 @@ class Router(nn.Module):
 
 
 class NonlinearMixtureMobile(nn.Module):
-    def __init__(self, expert_num, strategy='top1'):
+    def __init__(self, expert_num, strategy='top1', bias = False):
         super(NonlinearMixtureMobile, self).__init__()
         self.router = Router(3, expert_num, strategy=strategy)
         self.models = nn.ModuleList()
         for i in range(expert_num):
-            self.models.append(mobilenet.MobileNetV2()) 
+            self.models.append(mobilenet.MobileNetV2(bias = bias)) 
         self.strategy = strategy
         self.expert_num = expert_num
 

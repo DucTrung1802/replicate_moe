@@ -279,17 +279,6 @@ def test(epoch):
     # Save checkpoint.
     test_acc = 100.*correct/total
     test_loss = test_loss/(batch_idx+1)
-    if test_acc > best_acc:
-        print('Saving..')
-        state = {
-            "net": net.state_dict(),
-            "acc": test_acc,
-            "epoch": epoch,
-        }
-        if not os.path.isdir('checkpoint'):
-            os.mkdir('checkpoint')
-        torch.save(state, './checkpoint/ckpt.pth')
-        best_acc = test_acc
     return test_acc, test_loss
 
 if __name__ == "__main__":
@@ -320,7 +309,7 @@ if __name__ == "__main__":
 
         elif args.model == "MobileNetV2":
             if args.mixture:
-                net = moe.NonlinearMixtureMobile(EXPERT_NUM, strategy=strategy).to(
+                net = moe.NonlinearMixtureMobile(EXPERT_NUM, strategy=strategy, bias = True).to(
                     device
                 )
                 optimizer = moe.NormalizedGD(
@@ -336,20 +325,26 @@ if __name__ == "__main__":
                     net.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-4
                 )
                 optimizers = [optimizer]
-
+        
+        criterion = nn.CrossEntropyLoss()
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=MAX_EPOCH)
+        
         if args.resume:
             # Load checkpoint.
             print("==> Resuming from checkpoint..")
             assert os.path.isdir("checkpoint"), "Error: no checkpoint directory found!"
             checkpoint = torch.load(f"./checkpoint/{resume_checkpoint}.pth")
             net.load_state_dict(checkpoint["net"])
+            optimizer.load_state_dict(checkpoint["optimizer"])
+            if args.mixture:
+                optimizer2.load_state_dict(checkpoint["optimizer2"])
+            scheduler.load_state_dict(checkpoint["scheduler"])
             best_acc = checkpoint["acc"]
             start_epoch = checkpoint["epoch"]
 
-        criterion = nn.CrossEntropyLoss()
-        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=MAX_EPOCH)
+
 
         ent_list, acc_list = [], []
 
@@ -391,19 +386,33 @@ if __name__ == "__main__":
                     "test_loss": test_loss,
                 }
             )
-
-            # Early stopping
-            if DO_EARLY_STOP:
-            # if epoch > PATIENCE:
-                if patience_count >= PATIENCE:
-                    print(f"Early stopping, stop at epoch <{epoch}>.")
-                    break
-                else:
-                    if test_acc > best_acc:
-                        patience_count = 0
-                        best_acc = test_acc
-                    else:
-                        patience_count += 1
+            
+            print("Saving checkpoint..")
+            os.makedirs("checkpoint", exist_ok=True)
+            state = {
+                "net": net.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "optimizer2": optimizer2.state_dict() if args.mixture else None,
+                "scheduler": scheduler.state_dict(),
+                "acc": best_acc,
+                "epoch": epoch,
+            }
+            os.makedirs("checkpoint", exist_ok=True)
+            torch.save(state, f"./checkpoint/{checkpoint_name}.pth")
+            
+            if test_acc > best_acc:
+                best_acc = test_acc
+                # Early stopping
+                if DO_EARLY_STOP:
+                    patience_count = 0  # reset on improvement
+            else:
+                if DO_EARLY_STOP:
+                    patience_count += 1
+                    if patience_count > PATIENCE:
+                        print(
+                            f"Early stopping at epoch {epoch} with best_acc {best_acc:.4f}"
+                        )
+                        break
 
         run.finish()
 
