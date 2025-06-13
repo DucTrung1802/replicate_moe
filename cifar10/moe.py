@@ -9,17 +9,32 @@ import torch.optim as optim
 import utils
 import torchvision.models as torchmodels
 import resnet, mobilenet
+from load_config import load_config
+
 
 from torch.optim.optimizer import Optimizer, required
 from torch.optim import _functional
 
-config = utils.get_config()
-classes = config["classes"]
-expert_num = config["experts"]
+
+# LOAD CONFIG =================================================================
+FINAL_CONFIG = load_config("config.json")
+# =============================================================================
+
+
+expert_num = FINAL_CONFIG["expert_num"]
+
 
 class NormalizedGD(Optimizer):
-    def __init__(self, params, lr=required, momentum=0, dampening=0,
-                 weight_decay=0, nesterov=False, maximize=False):
+    def __init__(
+        self,
+        params,
+        lr=required,
+        momentum=0,
+        dampening=0,
+        weight_decay=0,
+        nesterov=False,
+        maximize=False,
+    ):
         if lr is not required and lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if momentum < 0.0:
@@ -27,8 +42,14 @@ class NormalizedGD(Optimizer):
         if weight_decay < 0.0:
             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
 
-        defaults = dict(lr=lr, momentum=momentum, dampening=dampening,
-                        weight_decay=weight_decay, nesterov=nesterov, maximize=maximize)
+        defaults = dict(
+            lr=lr,
+            momentum=momentum,
+            dampening=dampening,
+            weight_decay=weight_decay,
+            nesterov=nesterov,
+            maximize=maximize,
+        )
         if nesterov and (momentum <= 0 or dampening != 0):
             raise ValueError("Nesterov momentum requires a momentum and zero dampening")
         super(NormalizedGD, self).__init__(params, defaults)
@@ -36,7 +57,7 @@ class NormalizedGD(Optimizer):
     def __setstate__(self, state):
         super(NormalizedGD, self).__setstate__(state)
         for group in self.param_groups:
-            group.setdefault('nesterov', False)
+            group.setdefault("nesterov", False)
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -49,22 +70,22 @@ class NormalizedGD(Optimizer):
             params_with_grad = []
             d_p_list = []
             momentum_buffer_list = []
-            weight_decay = group['weight_decay']
-            momentum = group['momentum']
-            dampening = group['dampening']
-            nesterov = group['nesterov']
-            lr = group['lr']
-            maximize = group['maximize']
+            weight_decay = group["weight_decay"]
+            momentum = group["momentum"]
+            dampening = group["dampening"]
+            nesterov = group["nesterov"]
+            lr = group["lr"]
+            maximize = group["maximize"]
 
-            per_expert_num = int(len(group['params'])/expert_num)
+            per_expert_num = int(len(group["params"]) / expert_num)
             per_expert_norm = [0 for i in range(expert_num)]
             for i in range(expert_num):
-                for j in range(i*per_expert_num,(i+1)*per_expert_num):
-                    p = group['params'][j]
+                for j in range(i * per_expert_num, (i + 1) * per_expert_num):
+                    p = group["params"][j]
                     if p.grad is not None:
                         per_expert_norm[i] += p.grad.norm()
 
-            for idx, p in enumerate(group['params']):
+            for idx, p in enumerate(group["params"]):
                 if p.grad is not None:
                     # Normalizing
                     if per_expert_norm[idx // per_expert_num] != 0:
@@ -74,25 +95,27 @@ class NormalizedGD(Optimizer):
                     d_p_list.append(p.grad)
 
                     state = self.state[p]
-                    if 'momentum_buffer' not in state:
+                    if "momentum_buffer" not in state:
                         momentum_buffer_list.append(None)
                     else:
-                        momentum_buffer_list.append(state['momentum_buffer'])
+                        momentum_buffer_list.append(state["momentum_buffer"])
 
-            _functional.sgd(params_with_grad,
-                            d_p_list,
-                            momentum_buffer_list,
-                            weight_decay=weight_decay,
-                            momentum=momentum,
-                            lr=lr,
-                            dampening=dampening,
-                            nesterov=nesterov,
-                            maximize=maximize)
+            _functional.sgd(
+                params_with_grad,
+                d_p_list,
+                momentum_buffer_list,
+                weight_decay=weight_decay,
+                momentum=momentum,
+                lr=lr,
+                dampening=dampening,
+                nesterov=nesterov,
+                maximize=maximize,
+            )
 
             # update momentum_buffers in state
             for p, momentum_buffer in zip(params_with_grad, momentum_buffer_list):
                 state = self.state[p]
-                state['momentum_buffer'] = momentum_buffer
+                state["momentum_buffer"] = momentum_buffer
 
         return loss
 
@@ -121,7 +144,7 @@ def choose2(t):
 
 def cumsum_exclusive(t, dim=-1):
     num_dims = len(t.shape)
-    num_pad_dims = - dim - 1
+    num_pad_dims = -dim - 1
     pre_padding = (0, 0) * num_pad_dims
     pre_slice = (slice(None),) * num_pad_dims
     padded_t = F.pad(t, (*pre_padding, 1, 0)).cumsum(dim=dim)
@@ -134,11 +157,19 @@ def safe_one_hot(indexes, max_length):
 
 
 class Router(nn.Module):
-    def __init__(self, input_dim, out_dim, strategy='top1', patch_size=4, rtype='conv2d', stride=4): #4,4
+    def __init__(
+        self,
+        input_dim,
+        out_dim,
+        strategy="top1",
+        patch_size=4,
+        rtype="conv2d",
+        stride=4,
+    ):  # 4,4
         super(Router, self).__init__()
-        if rtype == 'conv2d':
+        if rtype == "conv2d":
             self.conv1 = nn.Conv2d(3, out_dim, patch_size, stride)
-        elif rtype == 'linear':
+        elif rtype == "linear":
             self.conv1 = nn.Linear(1728, out_dim)
         self.out_dim = out_dim
         self.strategy = strategy
@@ -151,27 +182,27 @@ class Router(nn.Module):
         self.conv1.bias = torch.nn.Parameter(self.conv1.bias * 0)
 
     def forward(self, x):
-        x = self.conv1(x) 
+        x = self.conv1(x)
 
-        if self.rtype == 'conv2d':
+        if self.rtype == "conv2d":
             x = torch.sum(x, 2)
             x = torch.sum(x, 2)
-        
-        elif self.rtype == 'linear':
+
+        elif self.rtype == "linear":
             x = torch.sum(x, 1)
 
         if self.training:
-            x = x + torch.rand(x.shape[0],self.out_dim).cuda()
+            x = x + torch.rand(x.shape[0], self.out_dim).cuda()
         return x
 
 
 class NonlinearMixtureMobile(nn.Module):
-    def __init__(self, expert_num, strategy='top1'):
+    def __init__(self, expert_num, strategy="top1"):
         super(NonlinearMixtureMobile, self).__init__()
         self.router = Router(3, expert_num, strategy=strategy)
         self.models = nn.ModuleList()
         for i in range(expert_num):
-            self.models.append(mobilenet.MobileNetV2()) 
+            self.models.append(mobilenet.MobileNetV2())
         self.strategy = strategy
         self.expert_num = expert_num
 
@@ -180,7 +211,7 @@ class NonlinearMixtureMobile(nn.Module):
         select = F.softmax(select, dim=1)
 
         # top 1 or choose 1 according to probability
-        if self.strategy == 'top1':
+        if self.strategy == "top1":
             gate, index = top1(select)
         else:
             gate, index = choose1(select)
@@ -189,36 +220,39 @@ class NonlinearMixtureMobile(nn.Module):
 
         density = mask.mean(dim=-2)
         density_proxy = select.mean(dim=-2)
-        loss = (density_proxy * density).mean() * float(self.expert_num ** 2)
+        loss = (density_proxy * density).mean() * float(self.expert_num**2)
 
         mask_count = mask.sum(dim=-2, keepdim=True)
         mask_flat = mask.sum(dim=-1)
 
-        combine_tensor = (gate[..., None, None] * mask_flat[..., None, None]
-                          * F.one_hot(index, self.expert_num)[..., None])
-                          
+        combine_tensor = (
+            gate[..., None, None]
+            * mask_flat[..., None, None]
+            * F.one_hot(index, self.expert_num)[..., None]
+        )
+
         dispatch_tensor = combine_tensor.bool().to(combine_tensor)
         select0 = dispatch_tensor.squeeze(-1)
 
-        expert_inputs = torch.einsum('bjkd,ben->ebjkd', x, dispatch_tensor)
+        expert_inputs = torch.einsum("bjkd,ben->ebjkd", x, dispatch_tensor)
 
         output = []
         for i in range(self.expert_num):
             output.append(self.models[i](expert_inputs[i]))
 
         output = torch.stack(output)
-        output = torch.einsum('ijk,jil->il', combine_tensor, output)
+        output = torch.einsum("ijk,jil->il", combine_tensor, output)
         output = F.softmax(output, dim=1)
         return output, select0, loss, 0
 
 
 class NonlinearMixtureRes(nn.Module):
-    def __init__(self, expert_num, strategy='top1'):
+    def __init__(self, expert_num, strategy="top1"):
         super(NonlinearMixtureRes, self).__init__()
         self.router = Router(3, expert_num, strategy=strategy)
         self.models = nn.ModuleList()
         for i in range(expert_num):
-            self.models.append(resnet.ResNet18()) 
+            self.models.append(resnet.ResNet18())
         self.strategy = strategy
         self.expert_num = expert_num
 
@@ -226,8 +260,8 @@ class NonlinearMixtureRes(nn.Module):
         select = self.router(x)
         select = F.softmax(select, dim=1)
 
-        # top 1 or choose 1 according to probability 
-        if self.strategy == 'top1':
+        # top 1 or choose 1 according to probability
+        if self.strategy == "top1":
             gate, index = top1(select)
         else:
             gate, index = choose1(select)
@@ -236,18 +270,21 @@ class NonlinearMixtureRes(nn.Module):
 
         density = mask.mean(dim=-2)
         density_proxy = select.mean(dim=-2)
-        loss = (density_proxy * density).mean() * float(self.expert_num ** 2)
+        loss = (density_proxy * density).mean() * float(self.expert_num**2)
 
         mask_count = mask.sum(dim=-2, keepdim=True)
         mask_flat = mask.sum(dim=-1)
 
-        combine_tensor = (gate[..., None, None] * mask_flat[..., None, None]
-                          * F.one_hot(index, self.expert_num)[..., None])
-                          
+        combine_tensor = (
+            gate[..., None, None]
+            * mask_flat[..., None, None]
+            * F.one_hot(index, self.expert_num)[..., None]
+        )
+
         dispatch_tensor = combine_tensor.bool().to(combine_tensor)
         select0 = dispatch_tensor.squeeze(-1)
 
-        expert_inputs = torch.einsum('bjkd,ben->ebjkd', x, dispatch_tensor)
+        expert_inputs = torch.einsum("bjkd,ben->ebjkd", x, dispatch_tensor)
 
         output = []
         embed = []
@@ -256,10 +293,10 @@ class NonlinearMixtureRes(nn.Module):
             embed.append(self.models[i](expert_inputs[i])[1])
 
         output = torch.stack(output)
-        output = torch.einsum('ijk,jil->il', combine_tensor, output)
+        output = torch.einsum("ijk,jil->il", combine_tensor, output)
 
         embed = torch.stack(embed)
-        embed = torch.einsum('ijk,jil->il', combine_tensor, embed)
+        embed = torch.einsum("ijk,jil->il", combine_tensor, embed)
 
         output = F.softmax(output, dim=1)
 
@@ -268,11 +305,9 @@ class NonlinearMixtureRes(nn.Module):
     def return_select(self, x, soft=False):
         select = self.router(x)
 
-        if self.strategy == 'top1':
+        if self.strategy == "top1":
             _, index = top1(select)
         else:
             _, index = choose1(select)
 
         return index
-
-

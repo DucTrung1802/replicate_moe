@@ -10,7 +10,7 @@ import torch.nn.init as init
 
 
 def get_config():
-	c = open("config.JSON","r")
+	c = open("config.json","r")
 	return json.load(c)
 
 

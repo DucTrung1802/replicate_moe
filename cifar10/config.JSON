@@ -1,11 +1,26 @@
 {
   "model": "resnet",
-  "experts": 4,
+  "mixture": true,
+  "expert_num": 4,
   "strategy": "top1",
   "degree": 30,
   "crop": 24,
   "classes": 10,
   "clusters": 10,
+
+  "batch_size": 128,
+  "learning_rate": 1e-2,
+  "momentum": 0.9,
+  "weight_decay": 5e-4,
+  "max_epoch": 50,
   "patience": 5,
-  "max_epoch": 200
+  "early_stop": false,
+  "resume": false,
+  "resume_from_file": "checkpoint",
+
+  "wandb_upload": true,
+  "wandb_resume_id": null,
+  "wandb_name": null,
+
+  "note": null
 }

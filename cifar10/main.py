@@ -24,8 +24,10 @@ from PIL import Image
 from utils import entropy
 import numpy as np
 import random
-import supported
 import wandb
+import json
+from load_config import load_config
+
 
 torch.cuda.set_device(0)
 torch.manual_seed(1)
@@ -40,47 +42,25 @@ def seed_worker(worker_id):
 g = torch.Generator()
 g.manual_seed(0)
 
-config = get_config()
-EXPERT_NUM = config["experts"]
-CLUSTER_NUM = config["clusters"]
-strategy = config["strategy"]
-PATIENCE = config["patience"]
-MAX_EPOCHS = config["max_epoch"]
 
-parser = argparse.ArgumentParser(description="PyTorch CIFAR10 Training")
-parser.add_argument("--model", choices=supported.models)
-parser.add_argument(
-    "--mixture", action="store_true", help="use MoE model instead of single model"
-)
-parser.add_argument("--resume", "-r", help="resume from checkpoint")
-parser.add_argument(
-    "--batch_size", type=int, default=128, help="input batch size for training"
-)
-parser.add_argument("--note", default=None, help="note for the model")
-parser.add_argument("--wandb_id", default=None, help="id for the wandb run")
-parser.add_argument("--early_stop", action="store_true", help="use early stop")
-parser.add_argument("--max_epoch", type=int, help="max epoch")
-
-args = parser.parse_args()
-
-if args.max_epoch:
-    MAX_EPOCHS = args.max_epoch
+# LOAD CONFIG =================================================================
+FINAL_CONFIG = load_config("config.json")
+# =============================================================================
 
 
+# GLOBAL VARIABLES ============================================================
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
-# device = "cpu"
 best_test_loss = np.inf
 best_acc = 0  # best test accuracy
 best_acc_list = []
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
-batch_size = args.batch_size
-wandb_id = args.wandb_id
+checkpoint_name = f"ckpt_{'moe' if FINAL_CONFIG["mixture"] else 'norm'}_{FINAL_CONFIG["model"]}_batch_size_{FINAL_CONFIG["batch_size"]}_{FINAL_CONFIG["note"]}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+batch_size = FINAL_CONFIG["batch_size"]
 
-checkpoint_name = f"ckpt_{'moe' if args.mixture else 'norm'}_{args.model}_batch_size_{batch_size}_{args.note}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-resume_checkpoint = args.resume
+# =============================================================================
 
 
-# Data
+# region DATA LOADING ==========================================================
 print("==> Preparing data..")
 transform_train = transforms.Compose(
     [
@@ -91,6 +71,7 @@ transform_train = transforms.Compose(
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
     ]
 )
+
 
 transform_test = transforms.Compose(
     [
@@ -185,7 +166,10 @@ classes = (
 )
 
 
-# Training
+# endregion ===================================================================
+
+
+# region TRAIN FUCNTION =======================================================
 def train(epoch):
     net.train()
     train_loss = 0
@@ -195,13 +179,13 @@ def train(epoch):
         inputs, targets = inputs.to(device), targets.to(device)
         for optim in optimizers:
             optim.zero_grad()
-        if args.mixture:
+        if FINAL_CONFIG["mixture"]:
             outputs, _, load_balance_loss, _ = net(inputs)
             clf_loss = criterion(outputs, targets)
             loss = clf_loss + 0.001 * load_balance_loss
 
         else:
-            if args.model == "resnet18":
+            if FINAL_CONFIG["model"] == "resnet18":
                 outputs, _ = net(inputs)
             else:
                 outputs = net(inputs)
@@ -225,9 +209,14 @@ def train(epoch):
 
     train_acc = 100.0 * correct / total
     train_loss = train_loss / (batch_idx + 1)
+
     return train_acc, train_loss
 
 
+# endregion ===================================================================
+
+
+# region TEST FUCNTION ========================================================
 def test(epoch):
     global best_acc
     net.eval()
@@ -239,10 +228,10 @@ def test(epoch):
         for batch_idx, (inputs, targets) in enumerate(testloader):
             inputs, targets = inputs.to(device), targets.to(device)
             clusters = targets
-            if args.mixture:
+            if FINAL_CONFIG["mixture"]:
                 outputs, select0, _, _ = net(inputs)
             else:
-                if args.model == "resnet18":
+                if FINAL_CONFIG["model"] == "resnet18":
                     outputs, _ = net(inputs)
                 else:
                     outputs = net(inputs)
@@ -273,56 +262,94 @@ def test(epoch):
     return test_acc, test_loss
 
 
+# endregion ===================================================================
+
+
+# region MAIN =================================================================
 if __name__ == "__main__":
-    # for i in range(5):
+    print("Loading config...")
+    print(json.dumps(FINAL_CONFIG, indent=2))
+
     for i in range(1):
-        print(f"Model: {args.model} | Mixture: {args.mixture}")
-        print(f"Batch size: {batch_size}")
-        print(f"Early stop: {args.early_stop}")
         print("==> Building model..")
 
-        if args.model == "resnet18":
-            if args.mixture:
-                net = moe.NonlinearMixtureRes(EXPERT_NUM, strategy=strategy).to(device)
-                # optimizer = moe.NormalizedGD(net.models.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-4)
+        model = FINAL_CONFIG["model"]
+        mixture = FINAL_CONFIG["mixture"]
+        expert_num = FINAL_CONFIG["expert_num"]
+        strategy = FINAL_CONFIG["strategy"]
+        resume = FINAL_CONFIG["resume"]
+        max_epoch = FINAL_CONFIG["max_epoch"]
+        note = FINAL_CONFIG["note"]
+        early_stop = FINAL_CONFIG["early_stop"]
+        learning_rate = FINAL_CONFIG["learning_rate"]
+        weight_decay = FINAL_CONFIG["weight_decay"]
+        momentum = FINAL_CONFIG["momentum"]
+        wandb_name = FINAL_CONFIG["wandb_name"]
+        wandb_resume_id = FINAL_CONFIG["wandb_resume_id"]
+        checkpoint_resume_name = FINAL_CONFIG["resume_from_file"]
+
+        if model == "resnet18":
+            if mixture:
+                net = moe.NonlinearMixtureRes(
+                    expert_num=expert_num, strategy=strategy
+                ).to(device)
+                # optimizer = moe.NormalizedGD(net.models.parameters(), lr=1e-2, momentum=momentum, weight_decay=weight_decay)
                 optimizer = moe.NormalizedGD(
-                    net.models.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4
+                    net.models.parameters(),
+                    lr=learning_rate,  # Default: 0.1
+                    momentum=momentum,
+                    weight_decay=weight_decay,
                 )
                 optimizer2 = optim.SGD(
-                    net.router.parameters(), lr=1e-4, momentum=0.9, weight_decay=5e-4
+                    net.router.parameters(),
+                    lr=learning_rate,  # Default: 1e-4
+                    momentum=momentum,
+                    weight_decay=weight_decay,
                 )
                 optimizers = [optimizer, optimizer2]
             else:
                 net = resnet.ResNet18().to(device)
                 optimizer = optim.SGD(
-                    net.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-4
+                    net.parameters(),
+                    lr=learning_rate,  # Default: 1e-2
+                    momentum=momentum,
+                    weight_decay=weight_decay,
                 )
                 optimizers = [optimizer]
 
-        elif args.model == "MobileNetV2":
-            if args.mixture:
-                net = moe.NonlinearMixtureMobile(EXPERT_NUM, strategy=strategy).to(
-                    device
-                )
+        elif model == "MobileNetV2":
+            if mixture:
+                net = moe.NonlinearMixtureMobile(
+                    expert_num=expert_num, strategy=strategy
+                ).to(device)
                 optimizer = moe.NormalizedGD(
-                    net.models.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-4
+                    net.models.parameters(),
+                    lr=learning_rate,  # Default: 1e-2
+                    momentum=momentum,
+                    weight_decay=weight_decay,
                 )
                 optimizer2 = optim.SGD(
-                    net.router.parameters(), lr=1e-4, momentum=0.9, weight_decay=5e-4
+                    net.router.parameters(),
+                    lr=learning_rate,  # Default: 1e-4
+                    momentum=momentum,
+                    weight_decay=weight_decay,
                 )
                 optimizers = [optimizer, optimizer2]
             else:
                 net = mobilenet.MobileNetV2().to(device)
                 optimizer = optim.SGD(
-                    net.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-4
+                    net.parameters(),
+                    lr=learning_rate,  # Default: 1e-2
+                    momentum=momentum,
+                    weight_decay=weight_decay,
                 )
                 optimizers = [optimizer]
 
-        if args.resume:
+        if resume:
             # Load checkpoint.
             print("==> Resuming from checkpoint..")
             assert os.path.isdir("checkpoint"), "Error: no checkpoint directory found!"
-            checkpoint = torch.load(f"./checkpoint/{resume_checkpoint}.pth")
+            checkpoint = torch.load(f"./checkpoint/{checkpoint_resume_name}.pth")
             net.load_state_dict(checkpoint["net"])
             best_acc = checkpoint["acc"]
             start_epoch = checkpoint["epoch"]
@@ -330,36 +357,37 @@ if __name__ == "__main__":
         criterion = nn.CrossEntropyLoss()
         # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=MAX_EPOCHS
+            optimizer, T_max=max_epoch
         )
 
         ent_list, acc_list = [], []
 
         # Start a new wandb run to track this script.
-        wandb.login()
-        run = wandb.init(
-            # Set the wandb entity where your project will be logged (generally your team name).
-            entity="retsam-deep-learning",
-            # Set the wandb project where this run will be logged.
-            project="machine-learning-data-mining",
-            # id for the run
-            id=wandb_id,
-            # Resume a run that must use the same run ID.
-            resume="allow",
-            # Track hyperparameters and run metadata.
-            config={
-                "model": args.model,
-                "is_mixture": args.mixture,
-                "dataset": "CIFAR-10",
-                "batch_size": batch_size,
-                "epochs": MAX_EPOCHS,
-                "note": args.note,
-            },
-        )
+        if FINAL_CONFIG["wandb_upload"]:
+            wandb.login()
+            run = wandb.init(
+                # Set the wandb entity where your project will be logged (generally your team name).
+                entity="retsam-deep-learning",
+                # Set the wandb project where this run will be logged.
+                project="machine-learning-data-mining",
+                # id for the run
+                id=wandb_id,
+                # Resume a run that must use the same run ID.
+                resume="allow",
+                # Track hyperparameters and run metadata.
+                config={
+                    "model": model,
+                    "is_mixture": mixture,
+                    "dataset": "CIFAR-10",
+                    "batch_size": batch_size,
+                    "epochs": max_epoch,
+                    "note": note,
+                },
+            )
 
         patience_count = 0
-        for epoch in range(start_epoch, start_epoch + MAX_EPOCHS):
-            print(f"\nEpoch: {epoch + 1}/{MAX_EPOCHS}")
+        for epoch in range(start_epoch, start_epoch + max_epoch):
+            print(f"\nEpoch: {epoch + 1}/{max_epoch}")
             train_acc, train_loss = train(epoch)
             test_acc, test_loss = test(epoch)
             scheduler.step()
@@ -391,15 +419,16 @@ if __name__ == "__main__":
                 best_acc = test_acc
                 patience_count = 0  # reset on improvement
             else:
-                if args.early_stop:
+                if early_stop:
                     patience_count += 1
-                    if patience_count > PATIENCE:
+                    if patience_count > FINAL_CONFIG["patience"]:
                         print(
                             f"Early stopping at epoch {epoch} with best_acc {best_acc:.4f}"
                         )
                         break
 
-        run.finish()
+        if FINAL_CONFIG["wandb_upload"]:
+            run.finish()
 
         best_acc_list.append(best_acc)
         best_acc = 0
