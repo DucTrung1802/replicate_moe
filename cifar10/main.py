@@ -54,7 +54,7 @@ best_test_loss = np.inf
 best_acc = 0  # best test accuracy
 best_acc_list = []
 start_epoch = 0  # start from epoch 0 or last checkpoint epoch
-checkpoint_name = f"ckpt_{'moe' if FINAL_CONFIG["mixture"] else 'norm'}_{FINAL_CONFIG["model"]}_batch_size_{FINAL_CONFIG["batch_size"]}_{FINAL_CONFIG["note"]}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+checkpoint_name = f"ckpt_{'moe' if FINAL_CONFIG['mixture'] else 'norm'}_{FINAL_CONFIG['model']}_batch_size_{FINAL_CONFIG['batch_size']}_{FINAL_CONFIG['note']}_{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 batch_size = FINAL_CONFIG["batch_size"]
 
 # =============================================================================
@@ -371,18 +371,11 @@ if __name__ == "__main__":
                 # Set the wandb project where this run will be logged.
                 project="machine-learning-data-mining",
                 # id for the run
-                id=wandb_id,
+                id=wandb_resume_id,
                 # Resume a run that must use the same run ID.
                 resume="allow",
                 # Track hyperparameters and run metadata.
-                config={
-                    "model": model,
-                    "is_mixture": mixture,
-                    "dataset": "CIFAR-10",
-                    "batch_size": batch_size,
-                    "epochs": max_epoch,
-                    "note": note,
-                },
+                config=FINAL_CONFIG,
             )
 
         patience_count = 0
