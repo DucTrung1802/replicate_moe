@@ -35,6 +35,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
                 help=help_text,
             )
             parser.set_defaults(**{key: val})
+
         elif key == "model":
             parser.add_argument(
                 f"--{key}",
@@ -43,6 +44,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
                 default=val,
                 help=help_text,
             )
+
         elif key == "strategy":
             parser.add_argument(
                 f"--{key}",
@@ -51,6 +53,11 @@ def load_config(config_path: str) -> Dict[str, Any]:
                 default=val,
                 help=help_text,
             )
+
+        elif val is None:
+            # Handle None values (like wandb_name) safely by defaulting to str
+            parser.add_argument(f"--{key}", type=str, default=None, help=help_text)
+
         else:
             parser.add_argument(f"--{key}", type=type(val), default=val, help=help_text)
 
