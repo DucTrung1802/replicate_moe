@@ -374,6 +374,8 @@ if __name__ == "__main__":
                 id=wandb_resume_id,
                 # Resume a run that must use the same run ID.
                 resume="allow",
+                # Assign a name to the run
+                name=wandb_name,
                 # Track hyperparameters and run metadata.
                 config=FINAL_CONFIG,
             )
