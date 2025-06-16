@@ -62,7 +62,9 @@ parser.add_argument(
 )
 parser.add_argument("--note", default=None, help="note for the model")
 parser.add_argument("--wandb_id", default=None, help="id for the wandb run")
-
+parser.add_argument(
+    "--name", default="", help="wandb run name"
+)
 args = parser.parse_args()
 
 
@@ -75,6 +77,7 @@ start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 batch_size = args.batch_size
 wandb_id = args.wandb_id
 DO_EARLY_STOP = args.do_early_stop
+run_name = args.name if args.name else f"{args.model}_{'moe' if args.mixture else 'norm'}_{batch_size}_{args.note}"
 checkpoint_name = f"ckpt_{'moe' if args.mixture else 'norm'}_{args.model}_batch_size_{batch_size}_{args.note}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 resume_checkpoint = args.resume
 
@@ -152,7 +155,7 @@ trainset_aug_2 = torchvision.datasets.CIFAR10(
 # trainset.cluster = trainset.targets
 # trainset.targets = torch.zeros_like(trainset.targets)
 
-trainset = torch.utils.data.ConcatDataset([trainset, trainset_aug_1, trainset_aug_2])
+trainset = torch.utils.data.ConcatDataset([trainset, trainset_aug_1])
 trainloader = torch.utils.data.DataLoader(
     trainset,
     batch_size=batch_size,
@@ -208,14 +211,23 @@ def train(epoch):
     train_loss = 0
     correct = 0
     total = 0
+    dispatch_epoch = np.zeros(EXPERT_NUM)
     for batch_idx, (inputs, targets) in enumerate(trainloader):
         inputs, targets = inputs.to(device), targets.to(device)
         for optim in optimizers:
             optim.zero_grad()
         if args.mixture:
-            outputs, _, load_balance_loss, _ = net(inputs)
+            outputs, dispatch_tensor, load_balance_loss, entropy = net(inputs)
+            if len(dispatch_tensor.shape) > 2:
+                dispatch  = dispatch_tensor.mean(dim=0).mean(dim=0).to("cpu").detach().numpy()
+            else:
+                dispatch = dispatch_tensor.mean(dim=0).to("cpu").detach().numpy()
+            dispatch_epoch += dispatch
             clf_loss = criterion(outputs, targets)
-            loss = clf_loss + 0.001*load_balance_loss
+            
+            λ_entropy = 0.01
+            # loss = clf_loss + 0.001*load_balance_loss
+            loss = clf_loss + 0.05*load_balance_loss 
         
         else:
             if args.model == "resnet18":
@@ -232,12 +244,17 @@ def train(epoch):
         _, predicted = outputs.max(1)
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
-
+        
         progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                      % (train_loss/(batch_idx+1), 100.*correct/total, correct, total))
     train_acc = 100.*correct/total
     train_loss = train_loss/(batch_idx+1)
-    return train_acc, train_loss
+    if args.mixture:
+        dispatch_epoch = dispatch_epoch / (batch_idx + 1)
+        print(f"Dispatch: {dispatch_epoch}")
+        return train_acc, train_loss, dispatch_epoch
+    else:
+        return train_acc, train_loss, None
 def test(epoch):
     global best_acc
     net.eval()
@@ -309,11 +326,11 @@ if __name__ == "__main__":
 
         elif args.model == "MobileNetV2":
             if args.mixture:
-                net = moe.NonlinearMixtureMobile(EXPERT_NUM, strategy=strategy, bias = True).to(
+                net = moe.NonlinearMixtureMobile(EXPERT_NUM, strategy=strategy, bias = False).to(
                     device
                 )
                 optimizer = moe.NormalizedGD(
-                    net.models.parameters(), lr=1e-2, momentum=0.9, weight_decay=5e-4
+                    net.models.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4
                 )
                 optimizer2 = optim.SGD(
                     net.router.parameters(), lr=1e-4, momentum=0.9, weight_decay=5e-4
@@ -337,9 +354,9 @@ if __name__ == "__main__":
             assert os.path.isdir("checkpoint"), "Error: no checkpoint directory found!"
             checkpoint = torch.load(f"./checkpoint/{resume_checkpoint}.pth")
             net.load_state_dict(checkpoint["net"])
-            optimizer.load_state_dict(checkpoint["optimizer"])
+            optimizers[0].load_state_dict(checkpoint["optimizer"])
             if args.mixture:
-                optimizer2.load_state_dict(checkpoint["optimizer2"])
+                optimizers[1].load_state_dict(checkpoint["optimizer2"])
             scheduler.load_state_dict(checkpoint["scheduler"])
             best_acc = checkpoint["acc"]
             start_epoch = checkpoint["epoch"]
@@ -355,6 +372,7 @@ if __name__ == "__main__":
             entity="retsam-deep-learning",
             # Set the wandb project where this run will be logged.
             project="machine-learning-data-mining",
+            name = run_name,
             # id for the run
             id=wandb_id,
             # Resume a run that must use the same run ID.
@@ -373,7 +391,7 @@ if __name__ == "__main__":
         patience_count = 0
         for epoch in range(start_epoch, start_epoch + MAX_EPOCH):
             print(f"\nEpoch: {epoch + 1}/{MAX_EPOCH}")
-            train_acc, train_loss = train(epoch)
+            train_acc, train_loss, dispatch = train(epoch)
             test_acc, test_loss = test(epoch)
             scheduler.step()
 
@@ -384,15 +402,19 @@ if __name__ == "__main__":
                     "train_loss": train_loss,
                     "test_acc": test_acc,
                     "test_loss": test_loss,
+            
                 }
             )
-            
+            if args.mixture:
+                for i, val in enumerate(dispatch.tolist()):
+                    run.log({f"dispatch/expert_{i}": val})
+                        
             print("Saving checkpoint..")
             os.makedirs("checkpoint", exist_ok=True)
             state = {
                 "net": net.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "optimizer2": optimizer2.state_dict() if args.mixture else None,
+                "optimizer": optimizers[0].state_dict(),
+                "optimizer2": optimizers[1].state_dict() if args.mixture else None,
                 "scheduler": scheduler.state_dict(),
                 "acc": best_acc,
                 "epoch": epoch,

@@ -165,6 +165,36 @@ class Router(nn.Module):
         return x
 
 
+def apply_expert_dropout(logits, drop_prob=0.25, training=True):
+    """
+    Args:
+        logits: Tensor of shape [batch_size, num_experts]
+        drop_prob: float (probability of dropping each expert)
+        training: only apply during training
+    Returns:
+        modified_logits: same shape, with some logits set to -inf
+    """
+    if not training or drop_prob <= 0:
+        return logits
+
+    num_experts = logits.shape[-1]
+    
+    # Randomly decide which experts to drop (Bernoulli)
+    drop_mask = torch.bernoulli(torch.full((num_experts,), 1 - drop_prob)).bool()
+
+    # Ensure at least one expert is available
+    if drop_mask.sum() == 0:
+        keep_idx = torch.randint(0, num_experts, (1,))
+        drop_mask[keep_idx] = True
+
+    # Create a mask to set dropped experts to -inf
+    mask = drop_mask.unsqueeze(0).expand_as(logits)  # [batch_size, num_experts]
+    masked_logits = logits.clone()
+    masked_logits[~mask] = float('-inf')  # Drop experts from softmax/routing
+
+    return masked_logits
+
+
 class NonlinearMixtureMobile(nn.Module):
     def __init__(self, expert_num, strategy='top1', bias = False):
         super(NonlinearMixtureMobile, self).__init__()
@@ -177,11 +207,15 @@ class NonlinearMixtureMobile(nn.Module):
 
     def forward(self, x):
         select = self.router(x)
-        select = F.softmax(select, dim=1)
+        # select = apply_expert_dropout(select, drop_prob=0.25, training=self.training)
+        temperature = 1.5  # Tune between 1.0 and 2.5
+        select = F.softmax(select/temperature, dim=1)
 
         # top 1 or choose 1 according to probability
         if self.strategy == 'top1':
             gate, index = top1(select)
+        elif self.strategy == 'choose2':
+            gate, index = choose2(select)
         else:
             gate, index = choose1(select)
 
@@ -199,7 +233,14 @@ class NonlinearMixtureMobile(nn.Module):
                           
         dispatch_tensor = combine_tensor.bool().to(combine_tensor)
         select0 = dispatch_tensor.squeeze(-1)
+        
+        # print(x.shape)
+        if len(dispatch_tensor.shape) > 3:
+            dispatch_tensor = dispatch_tensor.sum(dim = 1)
 
+        # print(x.shape)
+        # print(dispatch_tensor[0])
+        # print(dispatch_tensor.shape)
         expert_inputs = torch.einsum('bjkd,ben->ebjkd', x, dispatch_tensor)
 
         output = []
@@ -207,9 +248,14 @@ class NonlinearMixtureMobile(nn.Module):
             output.append(self.models[i](expert_inputs[i]))
 
         output = torch.stack(output)
+        if len(combine_tensor.shape) > 3:
+            combine_tensor = combine_tensor.sum(dim = 1)
         output = torch.einsum('ijk,jil->il', combine_tensor, output)
         output = F.softmax(output, dim=1)
-        return output, select0, loss, 0
+
+        entropy = -(select * torch.log(select + 1e-8)).sum(dim=1).mean()
+
+        return output, select0, loss, entropy
 
 
 class NonlinearMixtureRes(nn.Module):
