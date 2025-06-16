@@ -61,7 +61,10 @@ parser.add_argument(
     "--do_early_stop", action = "store_true", help="input batch size for training"
 )
 parser.add_argument("--note", default=None, help="note for the model")
+parser.add_argument("--lambda_load_balance", type=float, default=0.001, help="coefficient for load balance loss")
+parser.add_argument("--lambda_entropy", type=float, default=0.0, help="coefficient for entropy")
 parser.add_argument("--wandb_id", default=None, help="id for the wandb run")
+
 parser.add_argument(
     "--name", default="", help="wandb run name"
 )
@@ -80,8 +83,8 @@ DO_EARLY_STOP = args.do_early_stop
 run_name = args.name if args.name else f"{args.model}_{'moe' if args.mixture else 'norm'}_{batch_size}_{args.note}"
 checkpoint_name = f"ckpt_{'moe' if args.mixture else 'norm'}_{args.model}_batch_size_{batch_size}_{args.note}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 resume_checkpoint = args.resume
-
-
+lambda_load_balance = args.lambda_load_balance
+lambda_entropy = args.lambda_entropy
 # Data
 print("==> Preparing data..")
 transform_train = transforms.Compose(
@@ -227,7 +230,8 @@ def train(epoch):
             
             λ_entropy = 0.01
             # loss = clf_loss + 0.001*load_balance_loss
-            loss = clf_loss + 0.05*load_balance_loss 
+            # Ngày mai: chạy lại choose 2 với lamda = 0.1 và 0.05
+            loss = clf_loss + lambda_load_balance*load_balance_loss + lambda_entropy*entropy
         
         else:
             if args.model == "resnet18":
