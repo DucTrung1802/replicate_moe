@@ -15,10 +15,10 @@ from torch.optim import _functional
 
 config = utils.get_config()
 classes = config["classes"]
-expert_num = config["experts"]
+# expert_num = config["experts"]
 
 class NormalizedGD(Optimizer):
-    def __init__(self, params, lr=required, momentum=0, dampening=0,
+    def __init__(self, params, lr=required, expert_num =4, momentum=0, dampening=0,
                  weight_decay=0, nesterov=False, maximize=False):
         if lr is not required and lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -32,6 +32,8 @@ class NormalizedGD(Optimizer):
         if nesterov and (momentum <= 0 or dampening != 0):
             raise ValueError("Nesterov momentum requires a momentum and zero dampening")
         super(NormalizedGD, self).__init__(params, defaults)
+
+        self.expert_num = expert_num
 
     def __setstate__(self, state):
         super(NormalizedGD, self).__setstate__(state)
@@ -56,9 +58,9 @@ class NormalizedGD(Optimizer):
             lr = group['lr']
             maximize = group['maximize']
 
-            per_expert_num = int(len(group['params'])/expert_num)
-            per_expert_norm = [0 for i in range(expert_num)]
-            for i in range(expert_num):
+            per_expert_num = int(len(group['params'])/self.expert_num)
+            per_expert_norm = [0 for i in range(self.expert_num)]
+            for i in range(self.expert_num):
                 for j in range(i*per_expert_num,(i+1)*per_expert_num):
                     p = group['params'][j]
                     if p.grad is not None:

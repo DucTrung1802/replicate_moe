@@ -64,8 +64,9 @@ parser.add_argument("--note", default=None, help="note for the model")
 parser.add_argument("--lambda_load_balance", type=float, default=0.001, help="coefficient for load balance loss")
 parser.add_argument("--lambda_entropy", type=float, default=0.0, help="coefficient for entropy")
 parser.add_argument("--temperature", type=float, default=1.0, help="coefficient for temperature scaling")
+parser.add_argument("--expert_num", type=int, default=4, help="number of experts")
 parser.add_argument("--wandb_id", default=None, help="id for the wandb run")
-
+parser.add_argument("--lr", type = float, default = 0.01, help = "learning_rate")
 parser.add_argument(
     "--name", default="", help="wandb run name"
 )
@@ -87,6 +88,8 @@ resume_checkpoint = args.resume
 lambda_load_balance = args.lambda_load_balance
 lambda_entropy = args.lambda_entropy
 temperature = args.temperature
+learning_rate = args.lr
+EXPERT_NUM = args.expert_num
 # Data
 print("==> Preparing data..")
 transform_train = transforms.Compose(
@@ -232,7 +235,6 @@ def train(epoch):
             
             λ_entropy = 0.01
             # loss = clf_loss + 0.001*load_balance_loss
-            # Ngày mai: chạy lại choose 2 với lamda = 0.1 và 0.05
             loss = clf_loss + lambda_load_balance*load_balance_loss + lambda_entropy*entropy
         
         else:
@@ -336,7 +338,7 @@ if __name__ == "__main__":
                     device
                 )
                 optimizer = moe.NormalizedGD(
-                    net.models.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4
+                    net.models.parameters(), lr=0.1, expert_num = EXPERT_NUM, momentum=0.9, weight_decay=5e-4
                 )
                 optimizer2 = optim.SGD(
                     net.router.parameters(), lr=1e-4, momentum=0.9, weight_decay=5e-4
@@ -401,6 +403,7 @@ if __name__ == "__main__":
             test_acc, test_loss = test(epoch)
             scheduler.step()
             logging_dict = {
+                "epoch": epoch + 1,
                 "train_acc": train_acc,
                 "train_loss": train_loss,
                 "test_acc": test_acc,
