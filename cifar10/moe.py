@@ -196,7 +196,7 @@ def apply_expert_dropout(logits, drop_prob=0.25, training=True):
 
 
 class NonlinearMixtureMobile(nn.Module):
-    def __init__(self, expert_num, strategy='top1', bias = False):
+    def __init__(self, expert_num, strategy='top1', temperature = 1, bias = False):
         super(NonlinearMixtureMobile, self).__init__()
         self.router = Router(3, expert_num, strategy=strategy)
         self.models = nn.ModuleList()
@@ -204,12 +204,12 @@ class NonlinearMixtureMobile(nn.Module):
             self.models.append(mobilenet.MobileNetV2(bias = bias)) 
         self.strategy = strategy
         self.expert_num = expert_num
+        self.temperature = temperature
 
     def forward(self, x):
         select = self.router(x)
         # select = apply_expert_dropout(select, drop_prob=0.25, training=self.training)
-        temperature = 1.5  # Tune between 1.0 and 2.5
-        select = F.softmax(select/temperature, dim=1)
+        select = F.softmax(select/self.temperature, dim=1)
 
         # top 1 or choose 1 according to probability
         if self.strategy == 'top1':

@@ -63,6 +63,7 @@ parser.add_argument(
 parser.add_argument("--note", default=None, help="note for the model")
 parser.add_argument("--lambda_load_balance", type=float, default=0.001, help="coefficient for load balance loss")
 parser.add_argument("--lambda_entropy", type=float, default=0.0, help="coefficient for entropy")
+parser.add_argument("--temperature", type=float, default=1.0, help="coefficient for temperature scaling")
 parser.add_argument("--wandb_id", default=None, help="id for the wandb run")
 
 parser.add_argument(
@@ -85,6 +86,7 @@ checkpoint_name = f"ckpt_{'moe' if args.mixture else 'norm'}_{args.model}_batch_
 resume_checkpoint = args.resume
 lambda_load_balance = args.lambda_load_balance
 lambda_entropy = args.lambda_entropy
+temperature = args.temperature
 # Data
 print("==> Preparing data..")
 transform_train = transforms.Compose(
@@ -330,7 +332,7 @@ if __name__ == "__main__":
 
         elif args.model == "MobileNetV2":
             if args.mixture:
-                net = moe.NonlinearMixtureMobile(EXPERT_NUM, strategy=strategy, bias = False).to(
+                net = moe.NonlinearMixtureMobile(EXPERT_NUM, strategy=strategy, temperature = temperature, bias = False).to(
                     device
                 )
                 optimizer = moe.NormalizedGD(
@@ -398,20 +400,23 @@ if __name__ == "__main__":
             train_acc, train_loss, dispatch = train(epoch)
             test_acc, test_loss = test(epoch)
             scheduler.step()
-
-            run.log(
-                {
-                    "best_acc": best_acc,
-                    "train_acc": train_acc,
-                    "train_loss": train_loss,
-                    "test_acc": test_acc,
-                    "test_loss": test_loss,
-            
-                }
-            )
+            logging_dict = {
+                "epoch": epoch + 1,
+                "train_acc": train_acc,
+                "train_loss": train_loss,
+                "test_acc": test_acc,
+                "test_loss": test_loss,
+                "learning_rate": scheduler.get_last_lr()[0],
+            }
             if args.mixture:
+                dispatch_log = {}
                 for i, val in enumerate(dispatch.tolist()):
-                    run.log({f"dispatch/expert_{i}": val})
+                    dispatch_log.update({f"dispatch/expert_{i}": val})
+                logging_dict.update(dispatch_log)
+            run.log(
+                logging_dict
+            )
+
                         
             print("Saving checkpoint..")
             os.makedirs("checkpoint", exist_ok=True)
