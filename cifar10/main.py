@@ -401,11 +401,11 @@ if __name__ == "__main__":
             test_acc, test_loss = test(epoch)
             scheduler.step()
             logging_dict = {
-                "epoch": epoch + 1,
                 "train_acc": train_acc,
                 "train_loss": train_loss,
                 "test_acc": test_acc,
                 "test_loss": test_loss,
+                "best_acc": best_acc,
                 "learning_rate": scheduler.get_last_lr()[0],
             }
             if args.mixture:
