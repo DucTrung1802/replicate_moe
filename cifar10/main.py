@@ -359,6 +359,7 @@ if __name__ == "__main__":
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer, T_max=max_epoch
         )
+        FINAL_CONFIG["lr_scheduler"] = scheduler.__class__.__name__
 
         ent_list, acc_list = [], []
 
@@ -394,6 +395,7 @@ if __name__ == "__main__":
                     "train_loss": train_loss,
                     "test_acc": test_acc,
                     "test_loss": test_loss,
+                    "learning_rate": scheduler.get_last_lr()[0],
                 }
             )
 

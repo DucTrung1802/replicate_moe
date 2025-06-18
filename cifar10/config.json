@@ -1,6 +1,6 @@
 {
   "model": "resnet",
-  "mixture": true,
+  "mixture": false,
   "expert_num": 4,
   "strategy": "top1",
   "degree": 30,
