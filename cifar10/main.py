@@ -342,21 +342,23 @@ if __name__ == "__main__":
                     momentum=momentum,
                     weight_decay=weight_decay,
                 )
-                optimizer2 = optim.SGD(
-                    net.router.parameters(),
-                    lr=learning_rate,  # Default: 1e-4
-                    momentum=momentum,
-                    weight_decay=weight_decay,
-                )
+                # optimizer2 = optim.SGD(
+                #     net.router.parameters(),
+                #     lr=learning_rate,  # Default: 1e-4
+                #     momentum=momentum,
+                #     weight_decay=weight_decay,
+                # )
+                optimizer2 = optim.Adagrad(params=net.router.parameters(), lr=learning_rate)
                 optimizers = [optimizer, optimizer2]
             else:
                 net = resnet.ResNet18().to(device)
-                optimizer = optim.SGD(
-                    net.parameters(),
-                    lr=learning_rate,  # Default: 1e-2
-                    momentum=momentum,
-                    weight_decay=weight_decay,
-                )
+                # optimizer = optim.SGD(
+                #     net.parameters(),
+                #     lr=learning_rate,  # Default: 1e-2
+                #     momentum=momentum,
+                #     weight_decay=weight_decay,
+                # )
+                optimizer = optim.Adagrad(params=net.parameters(), lr=learning_rate)
                 optimizers = [optimizer]
 
         elif model == "MobileNetV2":
@@ -370,21 +372,23 @@ if __name__ == "__main__":
                     momentum=momentum,
                     weight_decay=weight_decay,
                 )
-                optimizer2 = optim.SGD(
-                    net.router.parameters(),
-                    lr=learning_rate,  # Default: 1e-4
-                    momentum=momentum,
-                    weight_decay=weight_decay,
-                )
+                # optimizer2 = optim.SGD(
+                #     net.router.parameters(),
+                #     lr=learning_rate,  # Default: 1e-4
+                #     momentum=momentum,
+                #     weight_decay=weight_decay,
+                # )
+                optimizer2 = optim.Adagrad(params=net.router.parameters(), lr=learning_rate)
                 optimizers = [optimizer, optimizer2]
             else:
                 net = mobilenet.MobileNetV2().to(device)
-                optimizer = optim.SGD(
-                    net.parameters(),
-                    lr=learning_rate,  # Default: 1e-2
-                    momentum=momentum,
-                    weight_decay=weight_decay,
-                )
+                # optimizer = optim.SGD(
+                #     net.parameters(),
+                #     lr=learning_rate,  # Default: 1e-2
+                #     momentum=momentum,
+                #     weight_decay=weight_decay,
+                # )
+                optimizer = optim.Adagrad(params=net.parameters(), lr=learning_rate)
                 optimizers = [optimizer]
 
         if resume:
