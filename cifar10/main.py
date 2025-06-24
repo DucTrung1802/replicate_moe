@@ -342,19 +342,29 @@ if __name__ == "__main__":
                     momentum=momentum,
                     weight_decay=weight_decay,
                 )
-                optimizer2 = optim.SGD(
+                # optimizer2 = optim.SGD(
+                #     net.router.parameters(),
+                #     lr=learning_rate,  # Default: 1e-4
+                #     momentum=momentum,
+                #     weight_decay=weight_decay,
+                # )
+                optimizer2 = optim.AdamW(
                     net.router.parameters(),
                     lr=learning_rate,  # Default: 1e-4
-                    momentum=momentum,
                     weight_decay=weight_decay,
                 )
                 optimizers = [optimizer, optimizer2]
             else:
                 net = resnet.ResNet18().to(device)
-                optimizer = optim.SGD(
+                # optimizer = optim.SGD(
+                #     net.parameters(),
+                #     lr=learning_rate,  # Default: 1e-2
+                #     momentum=momentum,
+                #     weight_decay=weight_decay,
+                # )
+                optimizer = optim.AdamW(
                     net.parameters(),
                     lr=learning_rate,  # Default: 1e-2
-                    momentum=momentum,
                     weight_decay=weight_decay,
                 )
                 optimizers = [optimizer]
@@ -370,19 +380,29 @@ if __name__ == "__main__":
                     momentum=momentum,
                     weight_decay=weight_decay,
                 )
-                optimizer2 = optim.SGD(
+                # optimizer2 = optim.SGD(
+                #     net.router.parameters(),
+                #     lr=learning_rate,  # Default: 1e-4
+                #     momentum=momentum,
+                #     weight_decay=weight_decay,
+                # )
+                optimizer2 = optim.AdamW(
                     net.router.parameters(),
                     lr=learning_rate,  # Default: 1e-4
-                    momentum=momentum,
                     weight_decay=weight_decay,
                 )
                 optimizers = [optimizer, optimizer2]
             else:
                 net = mobilenet.MobileNetV2().to(device)
-                optimizer = optim.SGD(
+                # optimizer = optim.SGD(
+                #     net.parameters(),
+                #     lr=learning_rate,  # Default: 1e-2
+                #     momentum=momentum,
+                #     weight_decay=weight_decay,
+                # )
+                optimizer = optim.AdamW(
                     net.parameters(),
                     lr=learning_rate,  # Default: 1e-2
-                    momentum=momentum,
                     weight_decay=weight_decay,
                 )
                 optimizers = [optimizer]
