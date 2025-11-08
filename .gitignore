@@ -6,3 +6,5 @@ data/
 .env
 
 cifar10/wandb/
+
+moe_env/
